@@ -17,19 +17,19 @@ const int DIVER_COUNT = 2;
 const int MAX_IN_REEF = 2;
 
 //wait time scaling factor
-const int SCALING_FACTOR = 2;
+const int SCALING_FACTOR = 1;
 
 // max time a shark waits before getting hungry (in microseconds)
-const int SHARK_WAITING_TIME = SCALING_FACTOR * 3000000;
+const int SHARK_WAITING_TIME = SCALING_FACTOR * 2000000;
 
 // max time a shark spends feeding in the reef
-const int SHARK_FISHING_TIME = SCALING_FACTOR * 1000000;
+const int SHARK_FISHING_TIME = SCALING_FACTOR * 500000;
 
 // max time a diver waits before wanting to fish
-const int DIVER_WAITING_TIME = SCALING_FACTOR * 500000;
+const int DIVER_WAITING_TIME = SCALING_FACTOR * 100000;
 
 // max time a diver spends fishing in the reef
-const int DIVER_FISHING_TIME = SCALING_FACTOR * 500000;
+const int DIVER_FISHING_TIME = SCALING_FACTOR * 100000;
 
 // total time the simulation should run (in seconds)
 const int TOTAL_SECONDS = 60;
@@ -131,11 +131,11 @@ void *shark(void *arg) {
         }
         sharks_in_1++;
         sharks_feeding[k] = true;
-        report();
        
         //release lock1
         reef1 = pthread_mutex_unlock(&mutex1);
         assert(reef1 == 0);
+        report();
 
 
         /* feed for a while */
@@ -151,11 +151,11 @@ void *shark(void *arg) {
         sharks_feeding[k] = false;
         reef1 = pthread_cond_signal(&cond1);
         assert(reef1 == 0);
-        report();
 
         //release lock1
         reef1 = pthread_mutex_unlock(&mutex1);
         assert(reef1 == 0);
+        report();
 
 
         //***********************************//
@@ -175,11 +175,11 @@ void *shark(void *arg) {
         }
         sharks_in_2++;
         sharks_feeding[k] = true;
-        report();
 
         //release lock2
         reef2 = pthread_mutex_unlock(&mutex2);
         assert(reef2 == 0);
+        report();
 
 
         //wait
@@ -195,11 +195,11 @@ void *shark(void *arg) {
         sharks_feeding[k] = false;
         reef2 = pthread_cond_signal(&cond2);
         assert(reef2 == 0);
-        report();
 
         //release lock2
         reef2 = pthread_mutex_unlock(&mutex2);
         assert(reef2 == 0);
+        report();
     }
 
     return NULL;
