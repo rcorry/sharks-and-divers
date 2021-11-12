@@ -23,18 +23,21 @@ const int SCALING_FACTOR = 1;
 const int SHARK_WAITING_TIME = SCALING_FACTOR * 2000000;
 
 // max time a shark spends feeding in the reef
-const int SHARK_FISHING_TIME = SCALING_FACTOR * 500000;
+const int SHARK_FISHING_TIME = SCALING_FACTOR * 2000000;
 
 // max time a diver waits before wanting to fish
-const int DIVER_WAITING_TIME = SCALING_FACTOR * 100000;
+const int DIVER_WAITING_TIME = SCALING_FACTOR * 2000000;
 
 // max time a diver spends fishing in the reef
-const int DIVER_FISHING_TIME = SCALING_FACTOR * 100000;
+const int DIVER_FISHING_TIME = SCALING_FACTOR * 2000000;
 
 // total time the simulation should run (in seconds)
 const int TOTAL_SECONDS = 60;
 
-const int initial_count = 9;
+const int initial_count = 7;
+
+const double sratio = SHARK_COUNT / DIVER_COUNT;
+const double dratio = DIVER_COUNT / SHARK_COUNT;
 
 // whether or not each shark/diver is currently in the reef
 bool *divers_fishing;
@@ -42,19 +45,9 @@ bool *sharks_feeding;
 
 
 // declare synchronization variables here
-pthread_mutex_t mutex1;
-pthread_mutex_t mutex2;
+sem_t mutex, sharkcanfish, divercanfish;
+int sharks_in_reef, divers_in_reef, sharksfed, diversfed = 0;
 
-int reef1;
-int reef2;
-
-pthread_cond_t cond1;
-pthread_cond_t cond2;
-
-int sharks_in_1;
-int sharks_in_2;
-int divers_in_1;
-int divers_in_2;
 // end synchronization variables
 
 
@@ -114,92 +107,38 @@ void *shark(void *arg) {
         // sleep for some time
         usleep(random() % SHARK_WAITING_TIME);
 
-        //
-        // write code here to safely start the shark feeding
-        // note: call report() after setting sharks_feeding[k] to true
-        //
 
-        //REEF 1
-        //acquire lock1
-        reef1 = pthread_mutex_lock(&mutex1);
-        assert(reef1 == 0);
-
-        //wait for cond1
-        while (sharks_in_1 || divers_in_1 || divers_in_2) {
-            reef1 = pthread_cond_wait(&cond1, &mutex1);
-            assert(reef1 == 0);
+        //start feeding
+        sem_wait(&mutex);
+        bool handler = false;
+        if(SHARK_COUNT > DIVER_COUNT){
+            handler = sharksfed <= (sratio*diversfed+1);
+        } else {
+            handler = true;
         }
-        sharks_in_1++;
-        sharks_feeding[k] = true;
-       
-        //release lock1
-        reef1 = pthread_mutex_unlock(&mutex1);
-        assert(reef1 == 0);
-        report();
+        if (sharks_in_reef < 2 && !divers_in_reef && handler){
+            sem_wait(&sharkcanfish);
+            sharks_in_reef++;
+            sharksfed++;
+            sharks_feeding[k] = true;
+            report();
+            sem_post(&mutex);
+        } else {
+            sem_post(&mutex);
+            continue;
+        }
 
 
-        /* feed for a while */
         usleep(random() % SHARK_FISHING_TIME);
 
 
-        //acquire lock1
-        reef1 = pthread_mutex_lock(&mutex1);
-        assert(reef1 == 0);
-        
-        //signal that reef1 is free
-        sharks_in_1--;
+        sem_wait(&mutex);
+        sharks_in_reef--;
         sharks_feeding[k] = false;
-        reef1 = pthread_cond_signal(&cond1);
-        assert(reef1 == 0);
-
-        //release lock1
-        reef1 = pthread_mutex_unlock(&mutex1);
-        assert(reef1 == 0);
         report();
-
-
-        //***********************************//
-        usleep(random() % SHARK_WAITING_TIME);
-        //***********************************//
-
-
-        //REEF 2
-        //acquire lock2
-        reef2 = pthread_mutex_lock(&mutex2);
-        assert(reef2 == 0);
-
-        //wait on cond2
-        while (sharks_in_2 || divers_in_1 || divers_in_2){
-            reef2 = pthread_cond_wait(&cond2, &mutex2);
-            assert(reef2 == 0);
-        }
-        sharks_in_2++;
-        sharks_feeding[k] = true;
-
-        //release lock2
-        reef2 = pthread_mutex_unlock(&mutex2);
-        assert(reef2 == 0);
-        report();
-
-
-        //wait
-        usleep(random() % SHARK_FISHING_TIME);
-
-
-        //acquire lock2
-        reef2 = pthread_mutex_lock(&mutex2);
-        assert(reef2 == 0);
-        
-        //signal reef2 free
-        sharks_in_2--;
-        sharks_feeding[k] = false;
-        reef2 = pthread_cond_signal(&cond2);
-        assert(reef2 == 0);
-
-        //release lock2
-        reef2 = pthread_mutex_unlock(&mutex2);
-        assert(reef2 == 0);
-        report();
+        if (sharks_in_reef < 2 && !divers_in_reef)
+            sem_post(&sharkcanfish);
+        sem_post(&mutex);        
     }
 
     return NULL;
@@ -215,85 +154,37 @@ void *diver(void *arg) {
         // sleep for some time
         usleep(random() % DIVER_WAITING_TIME);
 
-        //
-        // write code here to safely start the diver fishing
-        // note: call report() after setting divers_fishing[k] to true
-        //
-        // Start REEF 1
-        //acquire lock1
-        reef1 = pthread_mutex_lock(&mutex1);
-        assert(reef1 == 0);
 
-        //wait on cond1
-        while (sharks_in_1 || sharks_in_2 || divers_in_1 ){
-            reef1 = pthread_cond_wait(&cond1, &mutex1);
-            assert(reef1 == 0);
+        sem_wait(&mutex);
+        bool handler = false;
+        if(SHARK_COUNT > DIVER_COUNT){
+            handler = true;
+        } else {
+            handler = diversfed <= (dratio*sharksfed+1);
         }
-        divers_in_1++;
-        divers_fishing[k] = true;
-        report();
+        if (divers_in_reef < 2 && !sharks_in_reef && handler){
+            sem_wait(&divercanfish);
+            divers_in_reef++;
+            diversfed++;
+            divers_fishing[k] = true;
+            report();
+            sem_post(&mutex);
+        } else {
+            sem_post(&mutex);
+            continue;
+        }
 
-        //release lock1
-        reef1 = pthread_mutex_unlock(&mutex1);
-        assert(reef1 == 0);
 
-
-        // fish for a while
         usleep(random() % DIVER_FISHING_TIME);
 
 
-        //STOP REEF 1
-        reef1 = pthread_mutex_lock(&mutex1);
-        assert(reef1 == 0);
-        
-        divers_in_1--;
+        sem_wait(&mutex);
+        divers_in_reef--;
         divers_fishing[k] = false;
-        reef1 = pthread_cond_signal(&cond1);
-        assert(reef1 == 0);
         report();
-
-        reef1 = pthread_mutex_unlock(&mutex1);
-        assert(reef1 == 0);
-
-
-        usleep(random() % DIVER_WAITING_TIME);
-
-
-        // Start REEF 2
-        reef2 = pthread_mutex_lock(&mutex2);
-        assert(reef2 == 0);
-
-        while (sharks_in_1 || sharks_in_2 || divers_in_2){
-            reef2 = pthread_cond_wait(&cond2, &mutex2);
-            assert(reef2 == 0);
-        }
-        divers_in_2++;
-        divers_fishing[k] = true;
-        report();
-
-        reef2 = pthread_mutex_unlock(&mutex2);
-        assert(reef2 == 0);
-
-
-
-        // fish for a while
-        usleep(random() % DIVER_FISHING_TIME);
-
-
-        //STOP REEF 2
-        reef2 = pthread_mutex_lock(&mutex2);
-        assert(reef2 == 0);
-        
-        divers_in_2--;
-        divers_fishing[k] = false;
-        reef2 = pthread_cond_signal(&cond2);
-        assert(reef2 == 0);
-        report();
-
-        reef2 = pthread_mutex_unlock(&mutex2);
-        assert(reef2 == 0);
-
-
+        if (divers_in_reef < 2 && !sharks_in_reef)
+            sem_post(&divercanfish);
+        sem_post(&mutex);        
     }
 
     return NULL;
@@ -303,14 +194,9 @@ int main(int argc, char **argv) {
     //
     // initialize synchronization variables here
     //
-    reef1 = pthread_mutex_init(&mutex1, NULL);
-    reef2 = pthread_mutex_init(&mutex2, NULL);
-    assert(reef1 == 0);
-    assert(reef2 == 0);
-    reef1 = pthread_cond_init(&cond1, NULL);
-    reef2 = pthread_cond_init(&cond2, NULL);
-    assert(reef1 == 0);
-    assert(reef2 == 0);
+    sem_init(&mutex, 0, 1);
+    sem_init(&sharkcanfish, 0, 2);
+    sem_init(&divercanfish, 0, 2);
     //
     // end of synchronization variable initialization
     //
