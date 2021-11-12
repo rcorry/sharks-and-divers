@@ -34,7 +34,7 @@ const int DIVER_FISHING_TIME = SCALING_FACTOR * 2000000;
 // total time the simulation should run (in seconds)
 const int TOTAL_SECONDS = 60;
 
-const int initial_count = 7;
+const int initial_count = 9;
 
 const double sratio = SHARK_COUNT / DIVER_COUNT;
 const double dratio = DIVER_COUNT / SHARK_COUNT;
